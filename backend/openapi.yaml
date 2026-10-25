@@ -1,0 +1,597 @@
+# OpenAPI description of the Dropbox API.
+#
+# Import this file into Postman (Import > choose this file), Insomnia or Bruno
+# to get a ready-made request for every endpoint. The examples match the users
+# created by `npm run db:seed`, so "Log in" works straight away. Logging in sends
+# back a token. To use it for every other request, open the collection's
+# Authorization tab, choose "Bearer Token", and paste the token in.
+#
+# In Postman's import settings, set "Parameter generation" to "Example" to fill
+# in the example values, and "Folder organization" to "Tags" to group requests
+# into Auth, Files and so on.
+#
+# This file is written by hand. When you change a route in src/routes/ or a
+# schema in src/schemas/, update this file to match.
+
+openapi: 3.0.3
+info:
+  title: Dropbox API
+  version: 1.0.0
+  description: |
+    Every request and response body uses snake_case field names.
+    IDs are UUIDs. Most routes need you to be logged in: log in or register
+    first, and send the `token` from the response in the Authorization header
+    of later requests, as `Authorization: Bearer <token>`. Tokens expire after
+    7 days. To log out, forget the token.
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Health
+  - name: Auth
+    description: Register, log in, and manage your own account
+  - name: Files
+    description: Your files. Every route needs a login.
+  - name: Storage
+    description: Downloading files with the local storage driver
+
+# Every route needs a login token, unless it says `security: []`
+security:
+  - bearerToken: []
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Check the API is running and can reach the database.
+      security: []
+      responses:
+        "200":
+          description: The API and database are working
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register
+      description: Create an account, and log in.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [first_name, last_name, email, password]
+              properties:
+                first_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  example: Dana
+                last_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  example: Murphy
+                email:
+                  type: string
+                  format: email
+                  example: dana@example.com
+                password:
+                  type: string
+                  minLength: 8
+                  example: password123
+      responses:
+        "201":
+          description: The new user, and a token that logs them in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          description: An account with that email already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: alice@example.com
+                password:
+                  type: string
+                  example: password123
+      responses:
+        "200":
+          description: The user, and a token that logs them in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          description: Email or password is incorrect
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get account
+      description: Get your account, including storage used.
+      responses:
+        "200":
+          description: Your account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/NotLoggedIn"
+    patch:
+      tags: [Auth]
+      summary: Update name
+      description: Change your name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [first_name, last_name]
+              properties:
+                first_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  example: Alice
+                last_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  example: Jones
+      responses:
+        "200":
+          description: Your updated account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/NotLoggedIn"
+
+  /api/auth/me/password:
+    put:
+      tags: [Auth]
+      summary: Change password
+      description: Change your password.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password:
+                  type: string
+                  example: password123
+                new_password:
+                  type: string
+                  minLength: 8
+                  example: newpassword123
+      responses:
+        "204":
+          description: Password changed
+        "400":
+          description: The current password is wrong, or the new one is too short
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/NotLoggedIn"
+
+  /api/auth/me/avatar:
+    put:
+      tags: [Auth]
+      summary: Upload avatar
+      description: Upload or replace your profile picture. The old picture, if there is one, is deleted.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [avatar]
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+                  description: A JPEG, PNG, GIF or WebP image
+      responses:
+        "200":
+          description: Your updated account, with the new avatar_url
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "400":
+          description: No image, or not a JPEG, PNG, GIF or WebP image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/NotLoggedIn"
+        "413":
+          $ref: "#/components/responses/TooLarge"
+    delete:
+      tags: [Auth]
+      summary: Delete avatar
+      description: Remove your profile picture.
+      responses:
+        "204":
+          description: Profile picture removed
+        "401":
+          $ref: "#/components/responses/NotLoggedIn"
+
+  /api/files:
+    get:
+      tags: [Files]
+      summary: List files
+      description: List your files, newest first.
+      parameters:
+        - name: q
+          in: query
+          description: Only files whose name contains this text
+          schema:
+            type: string
+          example: beach
+        - name: starred
+          in: query
+          description: Set to true to only list starred files
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Your files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/File"
+        "401":
+          $ref: "#/components/responses/NotLoggedIn"
+    post:
+      tags: [Files]
+      summary: Upload files
+      description: |
+        Upload up to 10 files.
+
+        Either every file is saved, or none are. The upload fails if a name is
+        already taken, a file is too large, or there isn't enough storage space.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: string
+                  format: binary
+                  description: |
+                    One file. To upload several (up to 10), send the "files"
+                    field more than once. In Postman, add another "files" row.
+      responses:
+        "201":
+          description: The new files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/File"
+        "400":
+          description: No files, more than 10, or the wrong form field name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/NotLoggedIn"
+        "409":
+          $ref: "#/components/responses/NameTaken"
+        "413":
+          description: A file is too large, or there isn't enough storage space
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/files/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: The file's id, from the list of files
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Files]
+      summary: Update file
+      description: Rename a file, star or unstar it, or both.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                  example: Holiday photo.jpg
+                is_starred:
+                  type: boolean
+                  example: true
+      responses:
+        "200":
+          description: The updated file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/File"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/NotLoggedIn"
+        "404":
+          $ref: "#/components/responses/FileNotFound"
+        "409":
+          $ref: "#/components/responses/NameTaken"
+    delete:
+      tags: [Files]
+      summary: Delete file
+      description: Delete a file.
+      responses:
+        "204":
+          description: File deleted
+        "401":
+          $ref: "#/components/responses/NotLoggedIn"
+        "404":
+          $ref: "#/components/responses/FileNotFound"
+
+  /api/storage/{key}:
+    get:
+      tags: [Storage]
+      summary: Download file
+      description: |
+        Download a file (local storage driver only).
+
+        You don't normally build this URL yourself: use the `url` of a file, or
+        the `avatar_url` from /api/auth/me. It works for 1 hour, for anyone who
+        has it, like an S3 presigned URL. With the S3 driver, `url` points
+        straight to S3 instead, and this route does not exist.
+      security: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: expires
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: signature
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: query
+          description: The file name to download as
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: The file's type, e.g. image/png
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The file, always as a download (Content-Disposition attachment)
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "403":
+          description: The link is invalid or has expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: The file is no longer in storage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    bearerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: The `token` from logging in or registering
+
+  schemas:
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: "Send this as `Authorization: Bearer <token>`. It expires after 7 days."
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzZmE4NWY2NC01NzE3LTQ1NjItYjNmYy0yYzk2M2Y2NmFmYTYifQ.signature
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        first_name:
+          type: string
+          example: Alice
+        last_name:
+          type: string
+          example: Johnson
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+
+    Me:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            avatar_url:
+              type: string
+              nullable: true
+              description: A link to your profile picture, or null if you don't have one
+            storage_used_bytes:
+              type: integer
+              example: 469120
+            storage_quota_bytes:
+              type: integer
+              example: 1073741824
+
+    File:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Isle of Skye.jpg
+        mime_type:
+          type: string
+          example: image/jpeg
+        size_bytes:
+          type: integer
+          example: 243069
+        is_starred:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        url:
+          type: string
+          description: |
+            A link to download the file, or show it in <img src>. Works for 1 hour.
+            A signed /api/storage link with the local driver, or an S3 presigned URL.
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    ValidationErrorBody:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Password must be at least 8 characters
+        field:
+          type: string
+          description: The request field with the problem
+          example: password
+
+  responses:
+    ValidationError:
+      description: A field in the request body is missing or invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorBody"
+    NotLoggedIn:
+      description: You need to log in
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    FileNotFound:
+      description: No file with that id belongs to you
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NameTaken:
+      description: A file with that name already exists
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TooLarge:
+      description: The file is larger than MAX_UPLOAD_MB
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServerError:
+      description: Something went wrong, e.g. the database can't be reached
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
