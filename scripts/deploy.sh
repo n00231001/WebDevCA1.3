@@ -59,6 +59,7 @@ docker rm -f dropbox-frontend dropbox-backend 2>/dev/null || true
 docker run -d \
   --name dropbox-backend \
   --network dropbox-network \
+  --network-alias backend \
   "${PARAM_ENV[@]}" \
   --env NODE_ENV=production \
   --env PORT=3000 \
