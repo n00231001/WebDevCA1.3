@@ -19,36 +19,37 @@ jobs:
 
     if: github.event.workflow_run.conclusion == 'success'
 
-    steps:
+        steps:
       - name: Check out code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Check GitHub OIDC claims
+        shell: bash
+        run: |
+          TOKEN=$(curl -sS \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" \
+            | jq -r '.value')
+
+          python3 -c '
+          import base64, json, sys
+          payload = sys.argv[1].split(".")[1]
+          payload += "=" * (-len(payload) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(payload))
+          print(json.dumps({
+              "sub": claims.get("sub"),
+              "aud": claims.get("aud"),
+              "repository": claims.get("repository"),
+              "ref": claims.get("ref")
+          }, indent=2))
+          ' "$TOKEN"
+
+          unset TOKEN
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: eu-west-1
-
-      - name: Log in to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push backend image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./backend
-          push: true
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/dropbox-backend:latest
-            ${{ steps.login-ecr.outputs.registry }}/dropbox-backend:${{ github.event.workflow_run.head_sha }}
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          push: true
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/dropbox-frontend:latest
-            ${{ steps.login-ecr.outputs.registry }}/dropbox-frontend:${{ github.event.workflow_run.head_sha }}
