@@ -19,7 +19,7 @@ jobs:
 
     if: github.event.workflow_run.conclusion == 'success'
 
-        steps:
+    steps:
       - name: Check out code
         uses: actions/checkout@v4
         with:
@@ -53,3 +53,25 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: eu-west-1
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/dropbox-backend:latest
+            ${{ steps.login-ecr.outputs.registry }}/dropbox-backend:${{ github.event.workflow_run.head_sha }}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/dropbox-frontend:latest
+            ${{ steps.login-ecr.outputs.registry }}/dropbox-frontend:${{ github.event.workflow_run.head_sha }}
