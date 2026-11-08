@@ -90,3 +90,28 @@ Most requests need you to be logged in. Send the "Log in" request, and copy the 
 - Rows from the database keep their column names, e.g. `user.avatar_key`, but `req.user` uses camelCase, e.g. `req.user.avatarKey`.
 - The frontend uses the API's field names as they are, e.g. `user.first_name`.
 - The API sends each record's UUID as `id`. The numeric database id (`req.user.internalId`) is only used in SQL queries.
+
+## AWS deployment
+
+The Dropbox application is hosted on AWS using an EC2 instance which runs two separate Docker containers. The frontend container uses Nginx to serve the React application, while the backend container uses Node.js and Express to handle API requests.
+
+Both containers communicate using an internal Docker network called dropbox-network. The Docker images are stored in Amazon ECR and downloaded by EC2 during deployment.
+
+Amazon RDS provides the MySQL database for user information and file metadata, while Amazon S3 stores uploaded files. CloudFront provides HTTPS access, and Route 53 connects the application's custom domain to CloudFront.
+
+## CI/CD deployment
+
+GitHub Actions is used to automate code checks and deployments.
+
+The project contains three main workflows:
+Dropbox CI (checks.yml): Runs automated checks on the frontend and backend when code is pushed or a pull request is created.
+
+Dropbox Publish (publish.yml): Builds and uploads Docker images to Amazon ECR after successful checks on the main branch, then triggers deployment to EC2.
+
+Dropbox Rollback (rollback.yml): Allows an authorised developer to manually restore a previous application version.
+
+## Rollback
+
+During deployment, the deploy.sh script performs health checks to verify that the frontend and backend are responding. If the deployment fails these checks, the script attempts to restore the previous version.
+
+Developers can also manually trigger the Dropbox Rollback workflow through GitHub Actions and restore a previous version using its Git commit SHA.
