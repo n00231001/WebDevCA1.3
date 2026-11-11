@@ -7,10 +7,21 @@ import UploadButton from "@/components/UploadButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+// The ways the file list can be sorted, as "column:order"
+const SORT_OPTIONS = [
+  { value: "created_at:desc", label: "Newest first" },
+  { value: "created_at:asc", label: "Oldest first" },
+  { value: "name:asc", label: "Name (A to Z)" },
+  { value: "name:desc", label: "Name (Z to A)" },
+  { value: "size_bytes:desc", label: "Largest first" },
+  { value: "size_bytes:asc", label: "Smallest first" },
+];
+
 export default function FilesPage() {
   const [files, setFiles] = useState([]);
   const [search, setSearch] = useState("");
   const [starredOnly, setStarredOnly] = useState(false);
+  const [sort, setSort] = useState(SORT_OPTIONS[0].value);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
@@ -24,7 +35,7 @@ export default function FilesPage() {
 
     async function loadFiles() {
       try {
-        const result = await filesApi.listFiles(search, starredOnly);
+        const result = await filesApi.listFiles(search, starredOnly, sort);
         if (!ignore) {
           setFiles(result);
           setError(null);
@@ -113,6 +124,18 @@ export default function FilesPage() {
         >
           Starred
         </Button>
+        <select
+          className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+          aria-label="Sort files"
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+        >
+          {SORT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
         <UploadButton onUpload={handleUpload} />
       </div>
 

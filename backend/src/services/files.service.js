@@ -1,15 +1,23 @@
 import crypto from "node:crypto";
-import { and, asc, desc, eq, inArray, like } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { files } from "../schema.js";
 import { HttpError } from "../utils/httpError.js";
 import * as authService from "./auth.service.js";
 import * as storageService from "./storage.service.js";
 
-// Lists the user's files, newest first.
+// The columns the file list can be sorted by
+const SORT_COLUMNS = ["name", "size_bytes", "created_at"];
+
+// Lists the user's files, newest first by default.
 // search: only files whose name contains this text
 // starredOnly: only starred files
-export async function listFiles(userId, { search, starredOnly }) {
+// sort: the column to sort by, e.g. "name"
+// order: "asc" or "desc"
+export async function listFiles(
+  userId,
+  { search, starredOnly, sort = "created_at", order = "desc" },
+) {
   // Only the user's files, plus any filters
   const conditions = [eq(files.user_id, userId)];
   if (search) {
@@ -23,7 +31,7 @@ export async function listFiles(userId, { search, starredOnly }) {
     .select()
     .from(files)
     .where(and(...conditions)) // and() needs every condition to match
-    .orderBy(desc(files.created_at), desc(files.id));
+    .orderBy(sql.raw(`${sort} ${order}`), desc(files.id));
 
   const results = [];
   for (const file of rows) {

@@ -1,12 +1,18 @@
 import { request } from "./client";
 
-export function listFiles(search, starredOnly) {
+// sort is one of the SORT_OPTIONS in FilesPage, e.g. "name:asc"
+export function listFiles(search, starredOnly, sort) {
   const query = new URLSearchParams();
   if (search) {
     query.set("q", search);
   }
   if (starredOnly) {
     query.set("starred", "true");
+  }
+  if (sort) {
+    const [column, order] = sort.split(":");
+    query.set("sort", column);
+    query.set("order", order);
   }
   return request("GET", `/api/files?${query}`);
 }
