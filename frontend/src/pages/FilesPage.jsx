@@ -55,7 +55,7 @@ export default function FilesPage() {
     return () => {
       ignore = true;
     };
-  }, [search, starredOnly, reloadKey]);
+  }, [search, starredOnly, reloadKey, sort]);
 
   function reload() {
     setReloadKey(reloadKey + 1);

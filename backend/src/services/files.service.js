@@ -1,13 +1,17 @@
 import crypto from "node:crypto";
-import { and, asc, desc, eq, inArray, like, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like } from "drizzle-orm";
 import { db } from "../db.js";
 import { files } from "../schema.js";
 import { HttpError } from "../utils/httpError.js";
 import * as authService from "./auth.service.js";
 import * as storageService from "./storage.service.js";
 
+const SORT_COLUMNS = {
+  name: files.name,
+  size_bytes: files.size_bytes,
+  created_at: files.created_at,
+};
 // The columns the file list can be sorted by
-const SORT_COLUMNS = ["name", "size_bytes", "created_at"];
 
 // Lists the user's files, newest first by default.
 // search: only files whose name contains this text
@@ -26,12 +30,14 @@ export async function listFiles(
   if (starredOnly) {
     conditions.push(eq(files.is_starred, true));
   }
+  const sortColumn = SORT_COLUMNS[sort] ?? files.created_at;
+  const sortDirection = order === "asc" ? asc : desc;
 
   const rows = await db
     .select()
     .from(files)
     .where(and(...conditions)) // and() needs every condition to match
-    .orderBy(sql.raw(`${sort} ${order}`), desc(files.id));
+    .orderBy(sortDirection(sortColumn), desc(files.id));
 
   const results = [];
   for (const file of rows) {
