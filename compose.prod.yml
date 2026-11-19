@@ -1,0 +1,75 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Database root password required}
+      MYSQL_DATABASE: ${DB_NAME:?Database name required}
+      MYSQL_USER: ${DB_USER:?Database user required}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Database password required}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - app-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:?Database user required}
+      DB_PASSWORD: ${DB_PASSWORD:?Database password required}
+      DB_NAME: ${DB_NAME:?Database name required}
+      APP_SECRET: ${APP_SECRET:?Application secret required}
+      API_URL: ${API_URL:?Application URL required}
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS origin required}
+      MAX_UPLOAD_MB: 50
+      STORAGE_DRIVER: s3
+      S3_BUCKET: ${S3_BUCKET:?S3 bucket name required}
+      AWS_REGION: ${AWS_REGION:?AWS region required}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+
+volumes:
+  mysql-data:
+
+networks:
+  app-network:
+    driver: bridge
