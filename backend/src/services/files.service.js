@@ -6,10 +6,22 @@ import { HttpError } from "../utils/httpError.js";
 import * as authService from "./auth.service.js";
 import * as storageService from "./storage.service.js";
 
-// Lists the user's files, newest first.
+const SORT_COLUMNS = {
+  name: files.name,
+  size_bytes: files.size_bytes,
+  created_at: files.created_at,
+};
+// The columns the file list can be sorted by
+
+// Lists the user's files, newest first by default.
 // search: only files whose name contains this text
 // starredOnly: only starred files
-export async function listFiles(userId, { search, starredOnly }) {
+// sort: the column to sort by, e.g. "name"
+// order: "asc" or "desc"
+export async function listFiles(
+  userId,
+  { search, starredOnly, sort = "created_at", order = "desc" },
+) {
   // Only the user's files, plus any filters
   const conditions = [eq(files.user_id, userId)];
   if (search) {
@@ -18,12 +30,14 @@ export async function listFiles(userId, { search, starredOnly }) {
   if (starredOnly) {
     conditions.push(eq(files.is_starred, true));
   }
+  const sortColumn = SORT_COLUMNS[sort] ?? files.created_at;
+  const sortDirection = order === "asc" ? asc : desc;
 
   const rows = await db
     .select()
     .from(files)
     .where(and(...conditions)) // and() needs every condition to match
-    .orderBy(desc(files.created_at), desc(files.id));
+    .orderBy(sortDirection(sortColumn), desc(files.id));
 
   const results = [];
   for (const file of rows) {
