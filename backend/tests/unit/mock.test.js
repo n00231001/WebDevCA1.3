@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { loadNotes } from "./database.js";
 
 describe("mock functions", () => {
   test("a mock function records its calls", () => {
@@ -35,6 +36,21 @@ describe("countNotes", () => {
     ]);
 
     expect(await countNotes(loadNotes)).toBe(2);
+    expect(loadNotes).toHaveBeenCalledTimes(1);
+  });
+});
+
+vi.mock("./database.js", () => ({
+  loadNotes: vi.fn(),
+}));
+
+describe("module mocking", () => {
+  test("replaces the database function with a mock", async () => {
+    loadNotes.mockResolvedValue([{ id: 10 }, { id: 20 }]);
+
+    const notes = await loadNotes();
+
+    expect(notes).toHaveLength(2);
     expect(loadNotes).toHaveBeenCalledTimes(1);
   });
 });
