@@ -1,10 +1,15 @@
 
-import { describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
+import { resetDatabase } from "../helpers/database.js";
 import request from "supertest";
 
 import app from "../../src/app.js";
 
 import crypto from "node:crypto";
+
+beforeEach(async () => {
+  await resetDatabase();
+});
 
 describe("POST /api/auth/register", () => {
   test("rejects an invalid email address", async () => {
