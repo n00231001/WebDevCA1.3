@@ -1,0 +1,41 @@
+# A copy of the app for the end-to-end tests, with its own database.
+name: dropbox-e2e
+
+services:
+  app:
+    build:
+      context: ./backend
+    ports:
+      - "3001:3000"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: dropbox
+      DB_NAME: dropbox
+      STORAGE_DRIVER: local
+      UPLOAD_DIR: /app/uploads
+      MAX_UPLOAD_MB: 50
+      APP_SECRET: dropbox-e2e-test-secret
+      API_URL: http://localhost:3001
+      CORS_ORIGIN: http://localhost:5174
+    command: sh -c "npm run db:seed && exec node src/server.js"
+    init: true
+    tmpfs:
+      - /app/uploads:uid=1000,gid=1000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: dropbox
+      MYSQL_DATABASE: dropbox
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-pdropbox"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
